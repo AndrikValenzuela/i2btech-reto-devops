@@ -24,13 +24,25 @@
           - ca-certificates
           - conntrack
           - curl
-          - docker.io
           - gnupg
           - openssl
           - socat
           - unzip
         state: present
         update_cache: true
+
+    - name: Check whether Docker is already installed
+      ansible.builtin.command:
+        cmd: docker --version
+      register: docker_version
+      changed_when: false
+      failed_when: false
+
+    - name: Install Docker from Ubuntu repositories when missing
+      ansible.builtin.apt:
+        name: docker.io
+        state: present
+      when: docker_version.rc != 0
 
     - name: Enable and start Docker
       ansible.builtin.service:
