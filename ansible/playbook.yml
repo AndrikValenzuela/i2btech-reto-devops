@@ -213,3 +213,9 @@
           - "https://{{ ingress_host }}/public"
           - "https://{{ ingress_host }}/private (basic auth: {{ basic_auth_user }}/{{ basic_auth_password }})"
           - "https://{{ ingress_host }}/health_check"
+
+    - name: Restore protected regular file handling
+      ansible.builtin.command:
+        cmd: sysctl -w fs.protected_regular=2
+      changed_when: "'fs.protected_regular = 2' in restore_minikube_sysctl.stdout"
+      register: restore_minikube_sysctl
