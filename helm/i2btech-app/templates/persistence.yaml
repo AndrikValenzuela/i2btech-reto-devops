@@ -1,0 +1,34 @@
+{{- if .Values.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "i2btech-app.fullname" . }}-logs
+  labels:
+    {{- include "i2btech-app.labels" . | nindent 4 }}
+spec:
+  capacity:
+    storage: {{ .Values.persistence.size }}
+  volumeMode: Filesystem
+  accessModes:
+    {{- toYaml .Values.persistence.accessModes | nindent 4 }}
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.persistence.storageClassName | quote }}
+  hostPath:
+    path: {{ .Values.persistence.hostPath | quote }}
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "i2btech-app.fullname" . }}-logs
+  labels:
+    {{- include "i2btech-app.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.accessModes | nindent 4 }}
+  storageClassName: {{ .Values.persistence.storageClassName | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+  volumeName: {{ include "i2btech-app.fullname" . }}-logs
+{{- end }}

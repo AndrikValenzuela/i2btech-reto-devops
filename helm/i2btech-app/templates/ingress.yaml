@@ -1,0 +1,57 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "i2btech-app.fullname" . }}-public
+  labels:
+    {{- include "i2btech-app.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tls.existingSecret }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "i2btech-app.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "i2btech-app.fullname" . }}-private
+  labels:
+    {{- include "i2btech-app.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.basicAuth.existingSecret }}
+    nginx.ingress.kubernetes.io/auth-realm: {{ .Values.basicAuth.realm | quote }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tls.existingSecret }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /private
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "i2btech-app.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

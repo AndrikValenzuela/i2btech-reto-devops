@@ -1,0 +1,11 @@
+node_modules
+src/node_modules
+src/logs
+logs
+.git
+.env
+.terraform
+*.tfstate
+*.tfstate.*
+docker/nginx/certs
+docker/nginx/htpasswd

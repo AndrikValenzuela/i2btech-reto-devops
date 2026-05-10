@@ -1,0 +1,26 @@
+services:
+  app:
+    build:
+      context: .
+    image: i2btech-reto-devops:local
+    restart: unless-stopped
+    expose:
+      - "3000"
+    volumes:
+      - app_logs:/app/logs
+
+  nginx:
+    build:
+      context: ./docker/nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-devops}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-devops}
+      TLS_CN: ${TLS_CN:-localhost}
+    ports:
+      - "443:443"
+
+volumes:
+  app_logs:

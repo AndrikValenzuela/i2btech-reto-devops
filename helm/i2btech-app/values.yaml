@@ -1,0 +1,33 @@
+replicaCount: 1
+
+image:
+  repository: i2btech-reto-devops
+  tag: local
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: true
+  className: nginx
+  host: i2btech.local
+  tls:
+    enabled: true
+    existingSecret: i2btech-app-tls
+
+basicAuth:
+  enabled: true
+  existingSecret: i2btech-basic-auth
+  realm: Private
+
+persistence:
+  enabled: true
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  hostPath: /data/i2btech-logs
+
+resources: {}

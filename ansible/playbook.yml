@@ -1,0 +1,181 @@
+---
+- name: Provision local Minikube and deploy i2btech app
+  hosts: local
+  become: true
+  vars:
+    project_root: "{{ playbook_dir }}/.."
+    minikube_version: "v1.35.0"
+    kubectl_version: "v1.32.0"
+    helm_version: "v3.17.0"
+    terraform_version: "1.10.5"
+    ingress_host: "i2btech.local"
+    namespace: "i2btech"
+    release_name: "i2btech"
+    basic_auth_user: "devops"
+    basic_auth_password: "devops"
+    host_path: "/data/i2btech-logs"
+    kubeconfig_path: "/root/.kube/config"
+
+  tasks:
+    - name: Install OS dependencies
+      ansible.builtin.apt:
+        name:
+          - apache2-utils
+          - ca-certificates
+          - conntrack
+          - curl
+          - docker.io
+          - gnupg
+          - openssl
+          - socat
+          - unzip
+        state: present
+        update_cache: true
+
+    - name: Enable and start Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Detect system architecture
+      ansible.builtin.set_fact:
+        binary_arch: "{{ 'arm64' if ansible_architecture in ['aarch64', 'arm64'] else 'amd64' }}"
+
+    - name: Install kubectl
+      ansible.builtin.get_url:
+        url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/{{ binary_arch }}/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: "0755"
+
+    - name: Install Minikube
+      ansible.builtin.get_url:
+        url: "https://storage.googleapis.com/minikube/releases/{{ minikube_version }}/minikube-linux-{{ binary_arch }}"
+        dest: /usr/local/bin/minikube
+        mode: "0755"
+
+    - name: Download Helm archive
+      ansible.builtin.get_url:
+        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-{{ binary_arch }}.tar.gz"
+        dest: "/tmp/helm-{{ helm_version }}-linux-{{ binary_arch }}.tar.gz"
+        mode: "0644"
+
+    - name: Extract Helm
+      ansible.builtin.unarchive:
+        src: "/tmp/helm-{{ helm_version }}-linux-{{ binary_arch }}.tar.gz"
+        dest: /tmp
+        remote_src: true
+
+    - name: Install Helm binary
+      ansible.builtin.copy:
+        src: "/tmp/linux-{{ binary_arch }}/helm"
+        dest: /usr/local/bin/helm
+        mode: "0755"
+        remote_src: true
+
+    - name: Download Terraform archive
+      ansible.builtin.get_url:
+        url: "https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_{{ binary_arch }}.zip"
+        dest: "/tmp/terraform_{{ terraform_version }}_linux_{{ binary_arch }}.zip"
+        mode: "0644"
+
+    - name: Extract Terraform
+      ansible.builtin.unarchive:
+        src: "/tmp/terraform_{{ terraform_version }}_linux_{{ binary_arch }}.zip"
+        dest: /usr/local/bin
+        remote_src: true
+        mode: "0755"
+
+    - name: Start Minikube with Docker driver
+      ansible.builtin.command:
+        cmd: minikube start --driver=docker --force
+      environment:
+        MINIKUBE_HOME: /root
+        CHANGE_MINIKUBE_NONE_USER: "true"
+      changed_when: "'Done!' in minikube_start.stdout or 'enabled' in minikube_start.stdout"
+      register: minikube_start
+
+    - name: Enable ingress addon
+      ansible.builtin.command:
+        cmd: minikube addons enable ingress
+      environment:
+        MINIKUBE_HOME: /root
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: "'enabled' in ingress_addon.stdout"
+      register: ingress_addon
+
+    - name: Create hostPath directory inside Minikube
+      ansible.builtin.command:
+        cmd: minikube ssh -- sudo mkdir -p {{ host_path }}
+      environment:
+        MINIKUBE_HOME: /root
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    - name: Build app image inside Minikube Docker daemon
+      ansible.builtin.shell: |
+        set -e
+        eval "$(minikube docker-env)"
+        docker build -t i2btech-reto-devops:local .
+      args:
+        chdir: "{{ project_root }}"
+        executable: /bin/bash
+      environment:
+        MINIKUBE_HOME: /root
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: true
+
+    - name: Generate htpasswd content
+      ansible.builtin.command:
+        cmd: "htpasswd -nbB {{ basic_auth_user }} {{ basic_auth_password }}"
+      register: htpasswd_content
+      changed_when: false
+      no_log: true
+
+    - name: Initialize Terraform
+      ansible.builtin.command:
+        cmd: terraform init
+      args:
+        chdir: "{{ project_root }}/terraform"
+      environment:
+        HOME: /root
+        KUBECONFIG: "{{ kubeconfig_path }}"
+
+    - name: Deploy app with Terraform and Helm chart
+      ansible.builtin.command:
+        cmd: terraform apply -auto-approve
+      args:
+        chdir: "{{ project_root }}/terraform"
+      environment:
+        HOME: /root
+        KUBECONFIG: "{{ kubeconfig_path }}"
+        TF_VAR_kubeconfig_path: "{{ kubeconfig_path }}"
+        TF_VAR_namespace: "{{ namespace }}"
+        TF_VAR_release_name: "{{ release_name }}"
+        TF_VAR_chart_path: "{{ project_root }}/helm/i2btech-app"
+        TF_VAR_ingress_host: "{{ ingress_host }}"
+        TF_VAR_basic_auth_htpasswd: "{{ htpasswd_content.stdout }}"
+        TF_VAR_host_path: "{{ host_path }}"
+      no_log: true
+
+    - name: Ensure local hostname resolves to Minikube IP
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: "\\s{{ ingress_host }}$"
+        line: "{{ lookup('ansible.builtin.pipe', 'MINIKUBE_HOME=/root KUBECONFIG=' ~ kubeconfig_path ~ ' minikube ip') }} {{ ingress_host }}"
+        state: present
+
+    - name: Wait for application rollout
+      ansible.builtin.command:
+        cmd: "kubectl -n {{ namespace }} rollout status deployment/{{ release_name }}-i2btech-app --timeout=180s"
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    - name: Show browser links
+      ansible.builtin.debug:
+        msg:
+          - "https://{{ ingress_host }}/"
+          - "https://{{ ingress_host }}/public"
+          - "https://{{ ingress_host }}/private (basic auth: {{ basic_auth_user }}/{{ basic_auth_password }})"
+          - "https://{{ ingress_host }}/health_check"

@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "i2btech-app.fullname" . }}
+  labels:
+    {{- include "i2btech-app.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "i2btech-app.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "i2btech-app.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /health_check
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health_check
+              port: http
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: {{ include "i2btech-app.fullname" . }}-logs
