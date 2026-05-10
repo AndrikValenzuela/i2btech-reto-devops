@@ -9,7 +9,7 @@
     helm_version: "v3.17.0"
     terraform_version: "1.10.5"
     ingress_host: "i2btech.local"
-    namespace: "i2btech"
+    app_namespace: "i2btech"
     release_name: "i2btech"
     basic_auth_user: "devops"
     basic_auth_password: "devops"
@@ -150,7 +150,7 @@
         HOME: /root
         KUBECONFIG: "{{ kubeconfig_path }}"
         TF_VAR_kubeconfig_path: "{{ kubeconfig_path }}"
-        TF_VAR_namespace: "{{ namespace }}"
+        TF_VAR_namespace: "{{ app_namespace }}"
         TF_VAR_release_name: "{{ release_name }}"
         TF_VAR_chart_path: "{{ project_root }}/helm/i2btech-app"
         TF_VAR_ingress_host: "{{ ingress_host }}"
@@ -167,7 +167,7 @@
 
     - name: Wait for application rollout
       ansible.builtin.command:
-        cmd: "kubectl -n {{ namespace }} rollout status deployment/{{ release_name }}-i2btech-app --timeout=180s"
+        cmd: "kubectl -n {{ app_namespace }} rollout status deployment/{{ release_name }}-i2btech-app --timeout=180s"
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
       changed_when: false
