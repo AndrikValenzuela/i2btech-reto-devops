@@ -114,6 +114,12 @@
       loop_control:
         label: "{{ item.path }}"
 
+    - name: Allow root-owned Minikube process to use /tmp boot locks
+      ansible.builtin.command:
+        cmd: sysctl -w fs.protected_regular=0
+      changed_when: "'fs.protected_regular = 0' in minikube_sysctl.stdout"
+      register: minikube_sysctl
+
     - name: Start Minikube with Docker driver
       ansible.builtin.command:
         cmd: minikube start --driver=docker --force
