@@ -98,6 +98,22 @@
         remote_src: true
         mode: "0755"
 
+    - name: Find stale Minikube boot lock files
+      ansible.builtin.find:
+        paths: /tmp
+        patterns: "juju-*"
+        file_type: any
+        recurse: false
+      register: minikube_boot_locks
+
+    - name: Remove stale Minikube boot lock files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ minikube_boot_locks.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
     - name: Start Minikube with Docker driver
       ansible.builtin.command:
         cmd: minikube start --driver=docker --force
